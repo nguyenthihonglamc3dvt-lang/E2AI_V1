@@ -3,11 +3,8 @@ import {
   ArrowLeft,
   CheckCircle2,
   ChevronRight,
-  GraduationCap,
   Loader2,
   Search,
-  Sparkles,
-  UserCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -16,7 +13,6 @@ import {
   authenticateStudentSession,
   authenticateTeacherSession,
   ensureOfficialStudentsRoster,
-  findStudentByEmail,
   getStoredSession,
   isTeacherEmail,
   signOut,
@@ -24,7 +20,8 @@ import {
   useAuthSync,
 } from "@/lib/e2ai/auth";
 import { syncLinkedStudent } from "@/lib/e2ai/cloud";
-import { OFFICIAL_STUDENTS_LIST, OFFICIAL_TEACHER_INFO } from "@/lib/e2ai/content";
+import { OFFICIAL_STUDENTS_LIST } from "@/lib/e2ai/content";
+import { supabase } from "@/lib/e2ai/supabase";
 
 function GoogleWordmark() {
   return (
@@ -73,16 +70,33 @@ export function AuthGate({ children }: { children: ReactNode }) {
     void ensureOfficialStudentsRoster();
   }, []);
 
+  // Xử lý sau khi vừa xác thực thành công từ Google quay trở về web
   useEffect(() => {
-    if (!auth.user || !auth.official) return;
-    if (synced.current === auth.user.id) return;
-    synced.current = auth.user.id;
-    void syncLinkedStudent(auth.user.id, auth.official, auth.profile?.learningGoal ?? null).catch(
-      (e: Error) => console.warn(e.message),
-    );
-  }, [auth.user?.id, auth.official?.student_code]);
+    if (!auth.user || !auth.user.email) return;
 
-  // Kiểm tra session tức thì (đồng bộ và bất đồng bộ)
+    const userEmail = auth.user.email.toLowerCase();
+
+    // 1. Nếu tài khoản Google là Giáo viên -> Chuyển vào Quan tri
+    if (isTeacherEmail(userEmail)) {
+      void authenticateTeacherSession(userEmail).then(() => {
+        if (window.location.pathname !== "/quan-tri") {
+          window.location.href = "/quan-tri";
+        }
+      });
+      return;
+    }
+
+    // 2. Nếu đã đồng bộ học sinh thành công
+    if (auth.official) {
+      if (synced.current === auth.user.id) return;
+      synced.current = auth.user.id;
+      void syncLinkedStudent(auth.user.id, auth.official, auth.profile?.learningGoal ?? null).catch(
+        (e: Error) => console.warn(e.message),
+      );
+    }
+  }, [auth.user?.id, auth.user?.email, auth.official?.student_code]);
+
+  // Kiểm tra Session hiện tại
   const stored = getStoredSession();
   if (stored) {
     if (stored.role === "teacher") {
@@ -93,7 +107,6 @@ export function AuthGate({ children }: { children: ReactNode }) {
     }
   }
 
-  // Khóa điều hướng: Ngay khi có session trong useAuth, cho phép truy cập ngay lập tức
   if (auth.isTeacher || auth.role === "teacher") {
     return <>{children}</>;
   }
@@ -102,11 +115,11 @@ export function AuthGate({ children }: { children: ReactNode }) {
     return <>{children}</>;
   }
 
-  // Nếu người dùng đã đăng nhập Google nhưng chưa chọn mã học sinh trong 44 em (A01–A44)
-  if (auth.signedIn && !auth.official) {
+  // Đã nhập Gmail + Mật khẩu qua Google nhưng chưa chọn mã học sinh (A01–A44)
+  if (auth.signedIn && !auth.official && auth.user?.email && !isTeacherEmail(auth.user.email)) {
     return (
       <FirstTimeStudentModal
-        email={auth.user?.email || "student@gmail.com"}
+        email={auth.user.email}
         onLinked={() => {
           window.location.href = "/dashboard";
         }}
@@ -114,58 +127,26 @@ export function AuthGate({ children }: { children: ReactNode }) {
     );
   }
 
-  // Chưa đăng nhập -> Hiển thị màn hình đăng nhập Google duy nhất
+  // Chưa đăng nhập -> Hiện nút Đăng nhập Google duy nhất
   return <GoogleAccountsSignContainer />;
 }
 
 export function GoogleAccountsSignContainer() {
-  const [step, setStep] = useState<"initial" | "enter_email" | "pick_student">("initial");
-  const [emailInput, setEmailInput] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // Mở bước nhập Email
-  const handleStartGoogle = () => {
-    setStep("enter_email");
-  };
-
-  // Xử lý gửi Email linh hoạt cho 100% người dùng
-  const handleEmailSubmit = async (emailToProcess: string) => {
-    const clean = emailToProcess.trim().toLowerCase();
-    if (!clean) {
-      toast.error("Vui lòng nhập địa chỉ email Google (Gmail).");
-      return;
-    }
-    const fullEmail = clean.includes("@") ? clean : `${clean}@gmail.com`;
+  // Gọi trực tiếp cổng xác thực Google thật (Yêu cầu Mật khẩu Gmail chính thức)
+  const handleGoogleLoginReal = async () => {
     setBusy(true);
-
     try {
-      // 1. KIỂM TRA EMAIL GIÁO VIÊN
-      if (isTeacherEmail(fullEmail)) {
-        toast.success(
-          "Xác thực Giáo viên thành công. Đang chuyển vào Dashboard Quản trị...",
-        );
-        await authenticateTeacherSession(fullEmail);
-        window.location.href = "/quan-tri";
-        return;
-      }
-
-      // 2. KIỂM TRA HỌC SINH ĐÃ TỪNG ĐĂNG NHẬP (LẦN 2 TRỞ ĐI)
-      const existing = await findStudentByEmail(fullEmail);
-      if (existing) {
-        toast.success(
-          `Nhận diện học sinh ${existing.student_code} – ${existing.full_name}! Đang vào Dashboard...`,
-        );
-        await authenticateStudentSession(existing.student_code, existing.full_name, fullEmail);
-        window.location.href = "/dashboard";
-        return;
-      }
-
-      // 3. HỌC SINH MỚI LẦN ĐẦU -> CHO CHỌN MÃ HỌC SINH A01 - A44
-      setEmailInput(fullEmail);
-      setStep("pick_student");
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/dashboard`,
+        },
+      });
+      if (error) throw error;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Đăng nhập thất bại. Vui lòng thử lại.");
-    } finally {
+      toast.error(err instanceof Error ? err.message : "Đăng nhập Google thất bại. Vui lòng thử lại.");
       setBusy(false);
     }
   };
@@ -178,92 +159,34 @@ export function GoogleAccountsSignContainer() {
           <GoogleWordmark />
         </div>
 
-        {/* 1. MÀN HÌNH CHÍNH */}
-        {step === "initial" && (
-          <div className="space-y-6 text-center">
-            <div className="space-y-2">
-              <h1 className="text-3xl font-bold tracking-tight text-foreground">
-                Hệ thống E2AI V1
-              </h1>
-              <p className="text-muted-foreground text-sm">Hệ thống Luyện phản xạ nói tiếng Anh</p>
-            </div>
-
-            <div className="pt-4">
-              <button
-                type="button"
-                onClick={handleStartGoogle}
-                className="w-full h-12 flex items-center justify-center gap-3 px-6 rounded-full border border-input bg-card hover:bg-muted text-foreground font-medium text-sm shadow-xs hover:shadow-sm active:scale-[0.99] transition-all cursor-pointer group"
-              >
-                <GoogleIconG />
-                <span className="font-semibold text-foreground group-hover:text-primary transition-colors">
-                  Continue with Google
-                </span>
-                <ChevronRight className="size-4 text-muted-foreground ml-auto group-hover:translate-x-0.5 transition-transform" />
-              </button>
-            </div>
+        {/* Màn hình chính Đăng nhập bằng Google cho Giáo viên & Học sinh */}
+        <div className="space-y-6 text-center">
+          <div className="space-y-2">
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">
+              Hệ thống E2AI V1
+            </h1>
+            <p className="text-muted-foreground text-sm">Hệ thống Luyện phản xạ nói tiếng Anh</p>
           </div>
-        )}
 
-        {/* 2. BƯỚC NHẬP EMAIL GOOGLE (SẠCH BÓNG GỢI Ý MẪU) */}
-        {step === "enter_email" && (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              void handleEmailSubmit(emailInput);
-            }}
-            className="space-y-6"
-          >
-            <div className="text-center space-y-1">
-              <h1 className="text-2xl font-normal tracking-tight text-slate-800">
-                Đăng nhập bằng Google
-              </h1>
-              <p className="text-sm text-slate-600">Nhập địa chỉ Gmail của bạn để tiếp tục</p>
-            </div>
-
-            <div className="space-y-3">
-              <div className="relative">
-                <Input
-                  type="text"
-                  autoFocus
-                  required
-                  placeholder="Email hoặc số điện thoại (ví dụ: a42@gmail.com)"
-                  value={emailInput}
-                  onChange={(e) => setEmailInput(e.target.value)}
-                  className="h-12 px-3.5 text-base rounded-lg border-slate-300 focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8]"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between pt-2">
-              <button
-                type="button"
-                onClick={() => setStep("initial")}
-                className="text-sm font-medium text-[#1a73e8] hover:bg-blue-50 px-3 py-2 rounded-md transition-colors flex items-center gap-1"
-              >
-                <ArrowLeft className="size-4" /> Quay lại
-              </button>
-              <Button
-                type="submit"
-                disabled={busy}
-                className="h-10 px-6 rounded-md bg-[#1a73e8] hover:bg-[#1557b0] text-white font-medium text-sm shadow-sm"
-              >
-                {busy ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
-                Tiếp tục
-              </Button>
-            </div>
-          </form>
-        )}
-
-        {/* 3. BƯỚC CHỌN MÃ HỌC SINH MỚI (A01 - A44) */}
-        {step === "pick_student" && (
-          <StudentSelectionStep
-            email={emailInput}
-            onBack={() => setStep("enter_email")}
-            onSuccess={() => {
-              window.location.href = "/dashboard";
-            }}
-          />
-        )}
+          <div className="pt-4">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={handleGoogleLoginReal}
+              className="w-full h-12 flex items-center justify-center gap-3 px-6 rounded-full border border-input bg-card hover:bg-muted text-foreground font-medium text-sm shadow-xs hover:shadow-sm active:scale-[0.99] transition-all cursor-pointer group disabled:opacity-70"
+            >
+              {busy ? (
+                <Loader2 className="size-5 animate-spin text-primary" />
+              ) : (
+                <GoogleIconG />
+              )}
+              <span className="font-semibold text-foreground group-hover:text-primary transition-colors">
+                {busy ? "Đang mở cửa sổ Google..." : "Continue with Google"}
+              </span>
+              <ChevronRight className="size-4 text-muted-foreground ml-auto group-hover:translate-x-0.5 transition-transform" />
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Footer chuẩn Google */}
@@ -322,11 +245,10 @@ function StudentSelectionStep({
           Chọn Mã học sinh (A01 đến A44)
         </h2>
         <p className="text-xs text-slate-500">
-          Liên kết tài khoản Google: <b className="text-slate-800 font-mono">{email}</b>
+          Tài khoản Google thật: <b className="text-slate-800 font-mono">{email}</b>
         </p>
         <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-1">
-          Học sinh chọn đúng Mã số của mình. Hệ thống sẽ lưu liên kết vĩnh viễn và tự động nhận diện
-          ở các lần đăng nhập tiếp theo.
+          Học sinh chọn đúng Mã số của mình. Hệ thống sẽ lưu liên kết vĩnh viễn với tài khoản Google này cho các lần đăng nhập sau.
         </p>
       </div>
 
@@ -408,7 +330,7 @@ function StudentSelectionStep({
           onClick={onBack}
           className="text-xs text-[#1a73e8] hover:underline font-medium"
         >
-          ← Đổi email khác
+          ← Đổi tài khoản khác
         </button>
       </div>
     </div>

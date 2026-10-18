@@ -1,0 +1,6 @@
+{
+  "name": "E2AI V1 – Luyện phản xạ nói tiếng Anh",
+  "description": "E2AI V1 – hệ thống luyện phản xạ nói tiếng Anh và theo dõi tiến trình cá nhân cho học sinh THPT (nguyên mẫu nghiên cứu khoa học kỹ thuật).",
+  "permissions": [],
+  "capabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

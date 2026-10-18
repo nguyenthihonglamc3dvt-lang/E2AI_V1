@@ -1,0 +1,62 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1790646527378,
+      "tag": "0000_e2ai_core_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790646638740,
+      "tag": "0001_add_learning_goal_and_profile_trigger",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790646660400,
+      "tag": "0002_drop_auth_user_trigger",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790646711414,
+      "tag": "0003_add_suggested_seconds",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790838773488,
+      "tag": "0004_official_roster_and_linking",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790930580178,
+      "tag": "0005_fix_student_linking",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791428209733,
+      "tag": "0006_learning_resources",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791428252755,
+      "tag": "0007_learning_extra_fields",
+      "breakpoints": true
+    }
+  ]
+}

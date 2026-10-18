@@ -1,0 +1,1 @@
+alter table public.practice_sessions add column if not exists suggested_seconds integer;

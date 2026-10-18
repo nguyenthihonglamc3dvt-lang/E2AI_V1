@@ -123,12 +123,12 @@ export function GoogleAccountsSignContainer() {
   const [emailInput, setEmailInput] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // Xử lý khi nhấn nút chính "Continue with Google"
+  // Mở bước nhập Email
   const handleStartGoogle = () => {
     setStep("enter_email");
   };
 
-  // Xử lý gửi Email
+  // Xử lý gửi Email linh hoạt cho 100% người dùng
   const handleEmailSubmit = async (emailToProcess: string) => {
     const clean = emailToProcess.trim().toLowerCase();
     if (!clean) {
@@ -139,33 +139,28 @@ export function GoogleAccountsSignContainer() {
     setBusy(true);
 
     try {
-      // TRƯỜNG HỢP 1: GIÁO VIÊN
-      // Nếu Email chứa "doanvanto", "nthlam", "honglam", "nguyenthihonglam" hoặc đuôi ".edu" / ".edu.vn"
+      // 1. KIỂM TRA EMAIL GIÁO VIÊN
       if (isTeacherEmail(fullEmail)) {
         toast.success(
-          "Xác thực Giáo viên thành công (Cô Nguyễn Thị Hồng Lam). Đang chuyển vào Dashboard Quản trị...",
+          "Xác thực Giáo viên thành công. Đang chuyển vào Dashboard Quản trị...",
         );
         await authenticateTeacherSession(fullEmail);
-        // BẮT BUỘC DÙNG HARD REDIRECT
         window.location.href = "/quan-tri";
         return;
       }
 
-      // TRƯỜNG HỢP 3: HỌC SINH TỪ LẦN 2 TRỞ ĐI
-      // Tự động đối chiếu CSDL Supabase Cloud & LocalStorage, nhận diện Mã HS đã liên kết
+      // 2. KIỂM TRA HỌC SINH ĐÃ TỪNG ĐĂNG NHẬP (LẦN 2 TRỞ ĐI)
       const existing = await findStudentByEmail(fullEmail);
       if (existing) {
         toast.success(
           `Nhận diện học sinh ${existing.student_code} – ${existing.full_name}! Đang vào Dashboard...`,
         );
         await authenticateStudentSession(existing.student_code, existing.full_name, fullEmail);
-        // BẮT BUỘC DÙNG HARD REDIRECT VÀO DASHBOARD MÀ KHÔNG BẮT NHẬP LẠI MÃ
         window.location.href = "/dashboard";
         return;
       }
 
-      // TRƯỜNG HỢP 2: HỌC SINH LẦN ĐẦU
-      // Mở bảng nhập/chọn Mã HS (A01 đến A44)
+      // 3. HỌC SINH MỚI LẦN ĐẦU -> CHO CHỌN MÃ HỌC SINH A01 - A44
       setEmailInput(fullEmail);
       setStep("pick_student");
     } catch (err) {
@@ -178,15 +173,14 @@ export function GoogleAccountsSignContainer() {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-background text-foreground px-4 py-8 font-sans">
       <div className="w-full max-w-md space-y-6 text-center p-6 sm:p-8 bg-card rounded-3xl shadow-[0_4px_24px_rgba(0,0,0,0.06)] border border-border transition-all">
-        {/* Logo Google chuẩn nguyên bản */}
+        {/* Logo Google */}
         <div className="flex justify-center mb-1">
           <GoogleWordmark />
         </div>
 
-        {/* 1. MÀN HÌNH ĐĂNG NHẬP CHÍNH (TIÊU ĐỀ SẠCH 100% - CHUẨN ANONYMOUS NCKH) */}
+        {/* 1. MÀN HÌNH CHÍNH */}
         {step === "initial" && (
           <div className="space-y-6 text-center">
-            {/* TIÊU ĐỀ SẠCH 100% - CHUẨN ANONYMOUS NCKH */}
             <div className="space-y-2">
               <h1 className="text-3xl font-bold tracking-tight text-foreground">
                 Hệ thống E2AI V1
@@ -194,7 +188,6 @@ export function GoogleAccountsSignContainer() {
               <p className="text-muted-foreground text-sm">Hệ thống Luyện phản xạ nói tiếng Anh</p>
             </div>
 
-            {/* GIỮ NGUYÊN NÚT ĐĂNG NHẬP HOẠT ĐỘNG BÌNH THƯỜNG */}
             <div className="pt-4">
               <button
                 type="button"
@@ -211,7 +204,7 @@ export function GoogleAccountsSignContainer() {
           </div>
         )}
 
-        {/* 2. BƯỚC NHẬP EMAIL GOOGLE (GMAIL) */}
+        {/* 2. BƯỚC NHẬP EMAIL GOOGLE (SẠCH BÓNG GỢI Ý MẪU) */}
         {step === "enter_email" && (
           <form
             onSubmit={(e) => {
@@ -239,75 +232,6 @@ export function GoogleAccountsSignContainer() {
                   className="h-12 px-3.5 text-base rounded-lg border-slate-300 focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8]"
                 />
               </div>
-
-              {/* Các tài khoản gợi ý nhanh để kiểm thử và nghiên cứu */}
-              <div className="space-y-1.5 pt-1">
-                <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                  Chọn nhanh tài khoản nghiên cứu:
-                </p>
-                <div className="flex flex-col gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEmailInput(OFFICIAL_TEACHER_INFO.email);
-                      void handleEmailSubmit(OFFICIAL_TEACHER_INFO.email);
-                    }}
-                    className="flex items-center justify-between px-3 py-2 rounded-lg border border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 text-left transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="size-6 rounded-full bg-[#0f294a] text-white text-[10px] font-bold grid place-items-center">
-                        L
-                      </div>
-                      <span className="text-xs font-medium text-slate-800">
-                        Cô Nguyễn Thị Hồng Lam
-                      </span>
-                    </div>
-                    <span className="text-[10px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-semibold">
-                      Giáo viên
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const email = "phankhanhvy.a42@gmail.com";
-                      setEmailInput(email);
-                      void handleEmailSubmit(email);
-                    }}
-                    className="flex items-center justify-between px-3 py-2 rounded-lg border border-slate-200 hover:border-purple-400 hover:bg-purple-50/50 text-left transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="size-6 rounded-full bg-purple-600 text-white text-[10px] font-bold grid place-items-center">
-                        V
-                      </div>
-                      <span className="text-xs font-medium text-slate-800">Phan Khánh Vy</span>
-                    </div>
-                    <span className="text-[10px] bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded font-semibold">
-                      A42 · Lớp 12A1
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const email = "quocanh.a01@gmail.com";
-                      setEmailInput(email);
-                      void handleEmailSubmit(email);
-                    }}
-                    className="flex items-center justify-between px-3 py-2 rounded-lg border border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/50 text-left transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="size-6 rounded-full bg-emerald-600 text-white text-[10px] font-bold grid place-items-center">
-                        A
-                      </div>
-                      <span className="text-xs font-medium text-slate-800">Trần Quốc Anh</span>
-                    </div>
-                    <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-semibold">
-                      A01 · Lớp 12A1
-                    </span>
-                  </button>
-                </div>
-              </div>
             </div>
 
             <div className="flex items-center justify-between pt-2">
@@ -330,7 +254,7 @@ export function GoogleAccountsSignContainer() {
           </form>
         )}
 
-        {/* 3. BƯỚC HỌC SINH LẦN ĐẦU: CHỌN MÃ HS (A01 ĐẾN A44) */}
+        {/* 3. BƯỚC CHỌN MÃ HỌC SINH MỚI (A01 - A44) */}
         {step === "pick_student" && (
           <StudentSelectionStep
             email={emailInput}
@@ -378,12 +302,10 @@ function StudentSelectionStep({
     if (!picked) return;
     setBusy(true);
     try {
-      // Lưu liên kết VĨNH VIỄN (Google Auth ID ↔ Mã HS ↔ Tên học sinh) lên Supabase Cloud
       await authenticateStudentSession(picked.student_code, picked.full_name, email);
       toast.success(
         `Đã liên kết vĩnh viễn Google Mail với học sinh ${picked.student_code} – ${picked.full_name}! Đang vào Dashboard...`,
       );
-      // BẮT BUỘC DÙNG HARD REDIRECT
       window.location.href = "/dashboard";
       onSuccess();
     } catch (e) {
